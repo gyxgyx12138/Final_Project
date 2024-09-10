@@ -16,7 +16,7 @@ from helper.general_functions import create_and_write_csv
 from model.DeepCGSR.combine_review_rating import Calculate_Deep, Calculate_Deep_Orginal, merge_features, mergeReview_Rating, merge_features_mf
 from model.DeepCGSR.init import args
 from model.DeepCGSR.data_processing import TransformLabel, merge_csv_columns
-from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score, mean_squared_error
+from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error
 from model.DeepCGSR.review_processing.merge_senmatic_review import extract_features, initialize_features
 from helper.utils import read_data, setup_path, word_segment, convert_string_to_float_list
 from model.DeepCGSR.review_processing.coarse_gain import get_word2vec_model
@@ -235,7 +235,9 @@ def test_rsme(model, data_loader):
     #         new_predict.append(1)
     # print("F1_Score: ", f1_score(new_targer, new_predict))
     print("rsme raw: ", calculate_rmse(targets, predicts))
-    return calculate_rmse(targets, predicts)
+    mae_value = mean_absolute_error(targets, predicts)
+    print("MAE: ", mae_value)
+    return calculate_rmse(targets, predicts), mae_value
 
 def format_array(arr):
     # Chuyển mảng thành chuỗi với định dạng mong muốn

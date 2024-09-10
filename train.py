@@ -105,10 +105,10 @@ for num_factors in list_factors:
         
         model_deep = train_deepcgsr(train_data_loader, valid_data_loader, num_factors, batch_size, num_epochs, method, log_interval=100)
         auc_test = test(model_deep, test_data_loader)
-        rsme_test = test_rsme(model_deep, test_data_loader)
-        DeepCGSR_results = [auc_test, rsme_test]
+        rsme_test, mae_test = test_rsme(model_deep, test_data_loader)
+        DeepCGSR_results = [auc_test, rsme_test, mae_test]
         
-        save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test'], "model/results/"+ method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
+        save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test', 'MAE Test'], "model/results/"+ method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
     #endregion
 
     #region MFFR

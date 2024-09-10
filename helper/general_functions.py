@@ -6,21 +6,25 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import json
 import openpyxl
+from helper.utils import clean_text
 
 
 def split_text(text, max_length=300):
+    text = clean_text(text)
     sentences = text.split('. ')
     chunks = []
     current_chunk = []
-
-    for sentence in sentences:
-        if len(' '.join(current_chunk + [sentence])) > max_length:
+    try:
+        for sentence in sentences:
+            if len(' '.join(current_chunk + [sentence])) > max_length:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+            else:
+                current_chunk.append(sentence)
+        if current_chunk:
             chunks.append(' '.join(current_chunk))
-            current_chunk = [sentence]
-        else:
-            current_chunk.append(sentence)
-    if current_chunk:
-        chunks.append(' '.join(current_chunk))
+    except:
+        print("split_text", text)
     return chunks
 
 def create_and_write_csv(file_name, data, method_name):   

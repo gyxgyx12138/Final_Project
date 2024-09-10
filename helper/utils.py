@@ -7,6 +7,10 @@ from nltk.corpus import stopwords
 import torch
 import json
 import ast
+import re
+import os
+import glob
+import shutil
 
 def read_and_process_csv(file_path):
     # Đọc file CSV
@@ -87,6 +91,7 @@ def softmax(x):
 
 
 def sigmoid(x):
+    x = np.clip(x, -709, 709)
     s = 1 / (1 + np.exp(-x))
     return s
 
@@ -94,10 +99,25 @@ def sigmoid(x):
 # 加载停用词
 stop_words = stopwords.words("english") + list(string.punctuation)
 def word_segment(text):
-    # word_seg = [i for i in word_tokenize(str(text).lower()) if i not in stop_words]
-    # word_seg = text.split(" ")
-    word_seg = [i for i in word_tokenize(str(text).lower())]
+    # Kiểm tra nếu text là None hoặc NaN
+    if pd.isnull(text):
+        return []  # Trả về list rỗng nếu text là None hoặc NaN
+    # Tokenize chuỗi text
+    word_seg = word_tokenize(str(text).lower())  # Chuyển về chữ thường và tokenize
+    
     return word_seg
+
+
+def preprocessed(text):
+    """ 3文本预处理
+    """
+    # 分句和词性还原， 目前只实现分句
+    return text.split("\.")
+
+def clean_text(text):
+    # Loại bỏ các dấu chấm liên tiếp
+    text = re.sub(r'\.{2,}', ' ', text)
+    return text
 
 def tensor_to_list(data):
     if isinstance(data, torch.Tensor):
@@ -123,11 +143,44 @@ def dataloader_to_dataframe(dataloader):
     
     return df
 
-def preprocessed(text):
-    """ 3文本预处理
-    """
-    # 分句和词性还原， 目前只实现分句
-    return text.split("\.")
+def convert_string_to_float_list(string):
+    try:
+        # Sử dụng ast.literal_eval để chuyển đổi chuỗi thành danh sách thực
+        return np.array(ast.literal_eval(string), dtype=np.float64)
+    except:
+        # Trả về một mảng rỗng nếu không thể chuyển đổi
+        return np.array([])
+    
+def backup_and_delete_files(folder_path, backup_path, backup_folder_name, date, extensions=[".csv"]):
+    # Tạo đường dẫn tới thư mục sao lưu
+    backup_folder_path = os.path.join(backup_path, backup_folder_name + "_" + date)
+    print(f"Thư mục sao lưu: {backup_folder_path}")
+    
+    # Tạo thư mục sao lưu nếu chưa tồn tại
+    if not os.path.exists(backup_folder_path):
+        print(f"Tạo thư mục sao lưu mới: {backup_folder_path}")
+        os.makedirs(backup_folder_path)
+    
+    # Lặp qua từng loại file extension để sao lưu và xóa các file tương ứng
+    for ext in extensions:
+        # Tạo danh sách các tệp với phần mở rộng cụ thể trong thư mục gốc
+        files = glob.glob(os.path.join(folder_path, f"*{ext}"))
+
+        # Sao chép các tệp vào thư mục sao lưu và sau đó xóa chúng khỏi thư mục gốc
+        for file_path in files:
+            try:
+                file_name = os.path.basename(file_path)
+                # Sao chép tệp vào thư mục sao lưu
+                shutil.copy(file_path, backup_folder_path)
+                print(f"Đã sao chép: {file_path} tới {backup_folder_path}")
+                if file_name == "bert_last_checkpoint.pt":
+                    print(f"Bỏ qua không sao lưu và xóa: {file_path}")
+                    continue
+                # Xóa tệp từ thư mục gốc
+                os.remove(file_path)
+                print(f"Đã xóa: {file_path}")
+            except Exception as e:
+                print(f"Không thể sao chép hoặc xóa {file_path}. Lỗi: {e}")
 
 def setup_path(method_name):
     allreviews_path = "model/DeepCGSR/feature/allFeatureReview_"

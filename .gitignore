@@ -9,3 +9,5 @@ model/DeepCGSR/feature/
 model/DeepCGSR/feature_originalmethod/
 model/DeepCGSR/backup/
 model/DeepCGSR/data/
+.venv/
+
