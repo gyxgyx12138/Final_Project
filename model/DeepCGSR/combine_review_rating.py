@@ -4,25 +4,19 @@ import pandas as pd
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../helper')))
-from general_functions import create_and_write_csv, read_csv_file
+from helper.general_functions import create_and_write_csv, read_csv_file
 from model.DeepCGSR.review_processing.merge_senmatic_review import reviewer_feature_dict, item_feature_dict
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense, Multiply, Concatenate, Dot, Add
 
 
 #============================ Calulate U/I deep ===============================
 
-def Calculate_Deep(v, z, start):
-    list_sum = {}
-    i = start
-    for name, z_i in z.items():
-        if i < len(v):  # Đảm bảo vẫn còn phần tử trong danh sách v
-            v_i = v[i]
-            v_i = np.array(v_i)
-            v_z = v_i * z_i
-            v2_z2 = (v_i**2) * (z_i**2)
-            result = (1 / 2) * ((v_z)**2 - v2_z2)
-            list_sum[name] = result
-            i += 1
-    return list_sum
+def Calculate_Deep(v, z):
+    v_z = v * z
+    v2_z2 = (v**2) * (z**2)
+    result = (1 / 2) * ((v_z)**2 - v2_z2)
+    return result
 
 def Calculate_Deep_Orginal(x, v):
     k = v.size  # Số lượng đặc trưng
@@ -36,8 +30,8 @@ def Calculate_Deep_Orginal(x, v):
 def mergeReview_Rating(path, filename, svd, reviewer_feature_dict, item_feature_dict, getEmbedding, method_name):
     reviewerID,_ = read_csv_file(path)
     feature_dict = {}
-    # z_list = []
-    # v_list = []
+    review_feature_list = []
+    rating_feature_list = []
     for id in reviewerID:
         if getEmbedding == "reviewer":
             A = reviewer_feature_dict[id]
@@ -48,11 +42,61 @@ def mergeReview_Rating(path, filename, svd, reviewer_feature_dict, item_feature_
 
         z = np.concatenate((np.array(A), np.array(B)))
         feature_dict[id] = z
-        # z_list.append(A)
-        # v_list.append(B)
+        review_feature_list.append(A)
+        rating_feature_list.append(B)
     create_and_write_csv(filename, feature_dict, method_name)
-    return feature_dict
+    return feature_dict, review_feature_list, rating_feature_list
 
+def merge_features(review_feature, rating_feature, num_factors, model_type='DCN'):
+
+    input_text = Input(shape=(len(review_feature),))
+    input_rating = Input(shape=(len(rating_feature),))
+
+    if model_type == 'DCN':
+        deep = Dense(num_factors, activation='relu')(input_text)
+        deep = Dense(num_factors, activation='relu')(deep)
+
+        cross = Multiply()([input_text, input_rating])
+        cross = Add()([cross, input_text])
+        merged = Concatenate()([deep, cross])
+
+    elif model_type == 'NCF':
+        text_embedding = Dense(num_factors, activation='relu')(input_text)
+        rating_embedding = Dense(num_factors, activation='relu')(input_rating)
+
+        gmf = Multiply()([text_embedding, rating_embedding])
+
+        mlp = Concatenate()([text_embedding, rating_embedding])
+        mlp = Dense(num_factors, activation='relu')(mlp)
+        merged = Concatenate()([gmf, mlp])
+
+    else:
+        raise ValueError("model_type must be either 'DCN' or 'NCF'")
+
+    output = Dense(len(review_feature), activation='relu')(merged)
+    model = Model(inputs=[input_text, input_rating], outputs=output)
+    model.compile(optimizer='adam', loss='mse')
+    merged_vector = model.predict([np.array([review_feature]), np.array([rating_feature])])
+
+    return merged_vector.flatten()
+
+def merge_features_mf(review_feature, rating_feature, num_factors):
+    # Input layers
+    input_text = Input(shape=(len(review_feature),))
+    input_rating = Input(shape=(len(rating_feature),))
+
+    # Embedding layers for review and rating features
+    review_embedding = Dense(num_factors, activation='relu')(input_text)
+    rating_embedding = Dense(num_factors, activation='relu')(input_rating)
+    merged = Dot(axes=1)([review_embedding, rating_embedding])
+    output = Dense(len(review_feature), activation='relu')(merged)
+
+    # Model
+    model = Model(inputs=[input_text, input_rating], outputs=output)
+    model.compile(optimizer='adam', loss='mse')
+    merged_vector = model.predict([np.array([review_feature]), np.array([rating_feature])])
+
+    return merged_vector.flatten()
 
 
 

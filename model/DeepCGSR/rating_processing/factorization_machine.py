@@ -123,9 +123,9 @@ def run(file_path, n_factors, checkpoint_path, sparse_matrix_path):
 
     # Store feature names for easy lookup
     feature_names = encoder.get_feature_names_out(['reviewerID', 'itemID'])
-    print("Feature Names:", feature_names.shape)
-    print("X Shape:", X.shape)
-    print("y Shape:", y.shape)
+    # print("Feature Names:", feature_names.shape)
+    # print("X Shape:", X.shape)
+    # print("y Shape:", y.shape)
     
     # Example usage:
     n_features = X.shape[1]

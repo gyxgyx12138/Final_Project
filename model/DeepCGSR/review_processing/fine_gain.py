@@ -1,7 +1,7 @@
 
 import numpy as np
 import pandas as pd
-import tqdm
+from tqdm import tqdm
 from gensim import corpora
 from gensim.models import LdaModel
 from nltk.corpus import sentiwordnet as swn
@@ -12,22 +12,140 @@ from transformers import BertTokenizer, BertModel
 import torch
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../helper')))
-from utils import word_segment, preprocessed
+from transformers import BertTokenizer, BertForSequenceClassification
+from torch.optim import AdamW
+from torch.utils.data import DataLoader, Dataset
+from torch.nn.utils.rnn import pad_sequence
+
+from helper.utils import preprocessed, word_segment
+
+
+class CustomDataset(Dataset):
+    def __init__(self, texts, labels, tokenizer, max_len):
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, item):
+        text = self.texts[item]
+        label = self.labels[item]
+
+        encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=self.max_len,
+            padding='max_length',  # Tự động padding các chuỗi văn bản ngắn hơn max_len
+            truncation=True,  # Cắt bớt các chuỗi dài hơn max_len
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+
+        return {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'labels': torch.tensor(label, dtype=torch.long)
+        }
+
+def collate_fn(tokenizer):
+    def collate_batch(batch):
+        input_ids = [item['input_ids'] for item in batch]
+        attention_mask = [item['attention_mask'] for item in batch]
+        labels = [item['labels'] for item in batch]
+        
+        # Pad input_ids và attention_mask đến kích thước của chuỗi dài nhất trong batch
+        input_ids = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
+        attention_mask = pad_sequence(attention_mask, batch_first=True, padding_value=0)
+        
+        labels = torch.tensor(labels, dtype=torch.long)
+        
+        return {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': labels
+        }
+    return collate_batch
+
+def fine_tune_bert(texts, labels, num_labels, epochs=3, batch_size=8, max_len=512, learning_rate=2e-5, save_dir='./model/DeepCGSR/chkpt'):
+    # Khởi tạo tokenizer và dataset
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    dataset = CustomDataset(texts, labels, tokenizer, max_len)
+
+    # DataLoader với collate_fn
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn(tokenizer))
+
+    # Load pre-trained BERT và optimizer
+    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
+    optimizer = AdamW(model.parameters(), lr=learning_rate)
+
+    start_epoch = 0
+    checkpoint_path = os.path.join(save_dir, "bert_last_checkpoint.pt")
+
+    # Kiểm tra xem checkpoint có tồn tại không
+    if os.path.exists(checkpoint_path):
+        print(f"Checkpoint found at {checkpoint_path}. Loading checkpoint.")
+        checkpoint = torch.load(checkpoint_path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch']
+        print(f"Resuming training from epoch {start_epoch + 1}")
+        return model, tokenizer
+
+    # Training loop
+    for epoch in range(start_epoch, epochs):  # Bắt đầu từ epoch đã lưu
+        model.train()
+        total_loss = 0
+        progress_bar = tqdm(loader, desc=f"Epoch {epoch + 1}/{epochs}", unit="batch")
+        
+        for batch in progress_bar:
+            optimizer.zero_grad()
+            input_ids = batch['input_ids']
+            attention_mask = batch['attention_mask']
+            labels = batch['labels']
+
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+            total_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+
+            progress_bar.set_postfix({"Loss": total_loss / len(progress_bar)})
+
+        # Lưu mô hình sau mỗi epoch
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': total_loss / len(loader)
+        }, checkpoint_path)
+        
+        print(f"Epoch {epoch + 1} complete. Model saved to {checkpoint_path}.")
+
+    print(f"Training complete. Final loss: {total_loss / len(loader):.4f}")
+
+    return model, tokenizer
+
 
 # Load pre-trained BERT model and tokenizer
-def get_tbert_model(split_data, num_topics, num_words):
-    """ T-BERT模型训练词表构建主题单词矩阵获取 """
-    # Load pre-trained BERT model and tokenizer
-    model_name = 'bert-base-uncased'
-    tokenizer = BertTokenizer.from_pretrained(model_name)
-    model = BertModel.from_pretrained(model_name)
+def get_tbert_model(data_df, split_data, num_topics, num_words, is_switch_data=False):
+
+    cleaned_data = data_df.dropna(subset=['filteredReviewText', 'overall_new'])
+    cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
+
+    # Lấy danh sách reviews và labels từ dữ liệu đã làm sạch và chuyển đổi
+    texts = cleaned_data['filteredReviewText'].tolist()
+    labels = cleaned_data['overall_new'].tolist()
+
+    model, tokenizer = fine_tune_bert(texts, labels, num_labels=2, epochs=2)
     
     # Tokenize and get BERT embeddings for each document
     def get_bert_embeddings(texts):
         inputs = tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=512)
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model.bert(**inputs)
         return outputs.last_hidden_state.mean(dim=1)
     
     # Generate embeddings for all documents
@@ -40,16 +158,25 @@ def get_tbert_model(split_data, num_topics, num_words):
     # Clustering to find topics
     kmeans = KMeans(n_clusters=num_topics, random_state=0).fit(embeddings.numpy())
     labels = kmeans.labels_
-    
+
     # Extract top words for each topic
     topic_to_words = []
     for i in range(num_topics):
         cluster_indices = [j for j, label in enumerate(labels) if label == i]
         cluster_texts = [' '.join(split_data[j]) for j in cluster_indices]
-        
-        vectorizer = TfidfVectorizer(max_features=num_words)
+
+        # Remove empty or stop-word-only documents
+        cluster_texts = [text for text in cluster_texts if text.strip()]
+
+        # Skip if no valid documents remain for the cluster
+        if not cluster_texts:
+            topic_to_words.append([])
+            continue
+
+        # Proceed with vectorization
+        vectorizer = TfidfVectorizer(max_features=num_words, stop_words='english')
         tfidf_matrix = vectorizer.fit_transform(cluster_texts)
-        
+
         indices = np.argsort(tfidf_matrix.sum(axis=0)).flatten()[::-1]
         feature_names = vectorizer.get_feature_names_out()
         top_words = [feature_names[ind] for ind in indices[:num_words]]
@@ -61,9 +188,6 @@ def get_tbert_model(split_data, num_topics, num_words):
     return embeddings, model, kmeans, dictionary, topic_to_words
 
 def get_lda_model(split_data, num_topics, num_words):
-    """ LDA模型训练词表构建主题单词矩阵获取
-    """
-    # 构建词表
     dictionary = corpora.Dictionary(split_data)
     corpus = [dictionary.doc2bow(text) for text in split_data]
 
@@ -101,8 +225,7 @@ def get_topic_sentiment_metrix_lda(text, dictionary, lda_model, topic_word_metri
     text_p = word_segment(text)
     doc_bow = dictionary.doc2bow(text_p)  # 文档转换成bow
     doc_lda = lda_model[doc_bow]  # [(12, 0.042477883), (13, 0.36870235), (16, 0.35455772), (37, 0.20635633)]
-    # print("doc_bow: ", doc_bow)
-    # print("lda_model: ", doc_lda)
+
     # 初始化主题矩阵
     topci_sentiment_m = np.zeros(topic_nums)
 
@@ -110,13 +233,13 @@ def get_topic_sentiment_metrix_lda(text, dictionary, lda_model, topic_word_metri
     sentences = preprocessed(text)
     dep_parser_result_p = []
     for i in sentences:
-        # 依存句法分析 phan tich cu phap
+        # 依存句法分析
         # print(i)
         dep_parser_result = dependency_parser.raw_parse(i)
         # print(dep_parser_result)
         for j in dep_parser_result:
             dep_parser_result_p.append([j[0][0], j[2][0]])
-        # print(dep_parser_result_p)
+    #     print(dep_parser_result_p)
     # print(doc_lda)
     for topic_id, _ in doc_lda:
         # 获取当前主题的特征词
@@ -150,33 +273,88 @@ def get_topic_sentiment_metrix_lda(text, dictionary, lda_model, topic_word_metri
 
         topci_sentiment_m[topic_id] = cur_topic_sentiment
     return topci_sentiment_m
+#=================================================
+
+from nltk.corpus import wordnet as wn
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+analyzer = SentimentIntensityAnalyzer()
+
+def get_word_sentiment_score_by_vader(word):
+    sentiment_dict = analyzer.polarity_scores(word)
+    return sentiment_dict['compound']
+
+def get_top_synonyms(word, top_n=4):
+    # Tìm các synset liên quan đến từ cho danh từ, động từ, và tính từ
+    noun_synsets = wn.synsets(word, pos=wn.NOUN)
+    # verb_synsets = wn.synsets(word, pos=wn.VERB)
+    adj_synsets = wn.synsets(word, pos=wn.ADJ)
+
+    all_synsets = noun_synsets  + adj_synsets
+    synonym_scores = []
+    for synset in all_synsets:
+        for lemma in synset.lemma_names():
+            if lemma.lower() != word.lower() and lemma not in [syn[0] for syn in synonym_scores]:
+                synonym_scores.append((lemma))
+
+    return synonym_scores[:top_n]
+
+def get_word_sentiment_score_addition(word):
+    m = list(swn.senti_synsets(word))
+    s = 0
+    if not m:
+        return s  # Trả về 0 nếu không tìm thấy synset nào cho từ này
+    for synset in m:
+        if(synset.pos_score() == 0 and synset.neg_score() == 0):
+            s += get_word_sentiment_score_by_vader(synset.synset.name().split('.')[0])
+        else:
+            s += (synset.pos_score() - synset.neg_score())
+    return s
+
+def get_synonyms_sentiment_scores(word, top_n=4):
+    synonyms = get_top_synonyms(word, top_n=top_n)
+    scores = 0
+    
+    for synonym in synonyms:
+        sentiment_score = get_word_sentiment_score_addition(synonym)
+        scores += sentiment_score
+
+    scores = scores / top_n
+    return scores
+
 
 def get_topic_sentiment_matrix_tbert(text, topic_word_matrix, dependency_parser, topic_nums=50):
     topic_sentiment_m = np.zeros(topic_nums)
-    sentences = preprocessed(text)
-    dep_parser_result_p = []
-    for i in sentences:
-        dep_parser_result = dependency_parser.raw_parse(i)
-        for j in dep_parser_result:
-            dep_parser_result_p.append([j[0][0], j[2][0]])
+    try:
+        sentences = preprocessed(text)
+        dep_parser_result_p = []
+        
+        for i in sentences:
+            dep_parser_result = dependency_parser.raw_parse(i)
+            for j in dep_parser_result:
+                dep_parser_result_p.append([j[0][0], j[2][0]])
+                
+        for topic_id, cur_topic_words in enumerate(topic_word_matrix):
+            cur_topic_senti_word = []
+            for word in word_segment(text):
+                if any(word in sublist for sublist in cur_topic_words):
+                    cur_topic_senti_word.append(word)
+                    for p in dep_parser_result_p:
+                        if p[0] == word:
+                            cur_topic_senti_word.append(p[1])
+                        if p[1] == word:
+                            cur_topic_senti_word.append(p[0])
 
-    for topic_id, cur_topic_words in enumerate(topic_word_matrix):
-        cur_topic_sentiment = 0
-        cur_topic_senti_word = []
-        for word in word_segment(text):
-            if any(word in sublist for sublist in cur_topic_words):
-                cur_topic_senti_word.append(word)
-                for p in dep_parser_result_p:
-                    if p[0] == word:
-                        cur_topic_senti_word.append(p[1])
-                    if p[1] == word:
-                        cur_topic_senti_word.append(p[0])
-
-        cur_topic_sentiment = sum(get_word_sentiment_score(senti_word) for senti_word in cur_topic_senti_word)
-        topic_sentiment_m[topic_id] = np.clip(cur_topic_sentiment, -5, 5)
-    return topic_sentiment_m
-
-
+            if cur_topic_senti_word:  # Kiểm tra nếu danh sách không rỗng
+                cur_topic_sentiment = sum(get_synonyms_sentiment_scores(senti_word) for senti_word in cur_topic_senti_word)
+                topic_sentiment_m[topic_id] = np.clip(cur_topic_sentiment, -5, 5)
+            else:
+                topic_sentiment_m[topic_id] = 0  # Hoặc một giá trị mặc định khác nếu danh sách rỗng
+                
+        return topic_sentiment_m
+    except Exception as e:
+        print("get_topic_sentiment_matrix_tbert's error: ", e, " text: ", text)
+        return topic_sentiment_m
 
 
 

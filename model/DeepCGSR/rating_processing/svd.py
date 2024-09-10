@@ -85,7 +85,7 @@ class SVD():
 
             if (i + 1) % 50 == 0:
                 print(f"\nIteration {i + 1}:")
-                print(f"Train MSE: {np.sqrt(self._cost(emb_user, emb_item))}")
+            #     print(f"Train MSE: {np.sqrt(self._cost(emb_user, emb_item))}")
 
         self.emb_user = emb_user
         self.emb_item = emb_item

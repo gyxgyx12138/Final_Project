@@ -4,8 +4,9 @@ import pandas as pd
 from torch.utils.data import DataLoader, Dataset, random_split
 from sklearn.model_selection import train_test_split
 from helper.general_functions import save_to_excel
-from helper.utils import dataloader_to_dataframe, read_and_process_csv, read_data, word_segment
+from helper.utils import dataloader_to_dataframe, read_and_process_csv, read_data, word_segment, backup_and_delete_files
 # from model.DeepCGSR.train import DeepCGSR
+from model.DeepCGSR.review_processing.coarse_gain import get_word2vec_model
 from model.DeepCGSR.train import DeepCGSR, csv_to_dataloader, test, test_rsme, train_deepcgsr
 from model.MFFR.train_MFFR import MFFR
 
@@ -67,55 +68,64 @@ def create_dataframes(json_file, train_ratio=0.7, valid_ratio=0.1, test_ratio=0.
     return df, train_df, valid_df, test_df
 
 # Ví dụ sử dụng
-dataset_name = "All_Beauty_5_Filtered_0"
+dataset_name = "Small_Digital_Music_5_1"
 json_file = "model/DeepCGSR/data/" + dataset_name + ".json"
 batch_size = 32
 num_epochs = 100
-num_factors = 10
+# num_factors = 16
+list_factors = [8, 16, 32, 40]
 num_words = 300
-
+is_switch_data = True
 rsme_MFFR = 0
 mae_MFFR = 0
 f1_MFFR = 0
-for i in range(5):
+for num_factors in list_factors:
+    #for i in range(1):    
     
     # train_loader, valid_loader, test_loader = create_dataloaders(json_file, batch_size)
     all_df, train_df, valid_df, test_df = create_dataframes(json_file)
 
-    #region DeepCGSR
-    method_name = ["DeepCGSR", "triet_method"]
+    #region DeepCGSR 
+    # method_name = ["DeepCGSR", "triet_method"]
+    method_name = ["DeepCGSR"]
     for method in method_name:
         print("Method: ", method)
-        DeepCGSR(train_df, num_factors, num_words, "train", method)
-        DeepCGSR(valid_df, num_factors, num_words, "vaild", method)
-        DeepCGSR(test_df, num_factors, num_words, "test", method)
+        
+        DeepCGSR(train_df, num_factors, num_words, "train", method, is_switch_data)
+        DeepCGSR(valid_df, num_factors, num_words, "vaild", method, is_switch_data)
+        DeepCGSR(test_df, num_factors, num_words, "test", method, is_switch_data)
 
         final_feature_train_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
         final_feature_valid_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
         final_feature_test_path = "model/DeepCGSR/data/final_data_feature_" + method + "_test.csv"
 
-        train_data_loader = csv_to_dataloader(final_feature_train_path, batch_size, method)
-        valid_data_loader = csv_to_dataloader(final_feature_valid_path, batch_size, method)
-        test_data_loader = csv_to_dataloader(final_feature_test_path, batch_size, method)
+        train_data_loader = csv_to_dataloader(final_feature_train_path, batch_size)
+        valid_data_loader = csv_to_dataloader(final_feature_valid_path, batch_size)
+        test_data_loader = csv_to_dataloader(final_feature_test_path, batch_size)
         
         model_deep = train_deepcgsr(train_data_loader, valid_data_loader, num_factors, batch_size, num_epochs, method, log_interval=100)
         auc_test = test(model_deep, test_data_loader)
         rsme_test = test_rsme(model_deep, test_data_loader)
         DeepCGSR_results = [auc_test, rsme_test]
         
-        save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test'], "model/results/"+ method + "_" + dataset_name +".xlsx")
+        save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test'], "model/results/"+ method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
     #endregion
 
-    # #region MFFR
-    # method_name = "MFFR"
-    # rsme_new, mae_new, f1_new = MFFR(train_df, test_df, num_factors, num_epochs)
-    # rsme_MFFR += rsme_new
-    # mae_MFFR += mae_new
-    # f1_MFFR += f1_new
-    # MFFR_results = [f1_new, rsme_new]
-    # save_to_excel([MFFR_results], ['AUC', 'RSME Test'], "model/results/"+  method_name + "_" + dataset_name +".xlsx")
-    # #endregion
+    #region MFFR
+    method_name = "MFFR"
+    test_df = pd.concat([test_df, valid_df], ignore_index=True)
+    rsme_new, mae_new, f1_new = MFFR(train_df, test_df, num_factors, 15)
+    rsme_MFFR += rsme_new
+    mae_MFFR += mae_new
+    f1_MFFR += f1_new
+    MFFR_results = [f1_new, rsme_new]
+    save_to_excel([MFFR_results], ['AUC', 'RSME Test'], "model/results/"+  method_name + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
+    #endregion
+        
+    backup_and_delete_files("model/DeepCGSR/feature", "model/DeepCGSR/backup", "BKfeature", "290824", extensions=[".csv"])
+    backup_and_delete_files("model/DeepCGSR/feature_originalmethod", "model/DeepCGSR/backup", "BKfeature_originalmethod", "290824", extensions=[".csv"])
+    backup_and_delete_files("model/DeepCGSR/data", "model/DeepCGSR/backup", "BKdata", "290824", extensions=[".csv"])
+    backup_and_delete_files("model/DeepCGSR/chkpt", "model/DeepCGSR/backup", "BK_chkpt", "290824", extensions=[".pt", ".pkl", "npz"])
+    backup_and_delete_files("model/DeepCGSR/output", "model/DeepCGSR/backup", "BK_output", "290824", extensions=[".model"])
 
-# print("RSME: ", rsme_MFFR / 5)
-# print("MAE: ", mae_MFFR / 5)
-# print("F1 Score: ", f1_MFFR / 5)
+

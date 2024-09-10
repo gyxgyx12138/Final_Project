@@ -1,5 +1,5 @@
-from model.DeepCGSR.review_processing.fine_gain import get_word_sentiment_score
-from utils import softmax, word_segment, sigmoid
+from model.DeepCGSR.review_processing.fine_gain import get_word_sentiment_score_addition, get_word_sentiment_score
+from helper.utils import softmax, word_segment, sigmoid
 from gensim.models import word2vec, Word2Vec
 
 
@@ -25,6 +25,14 @@ def get_coarse_simtiment_score(text, word2vec_model):
 
 # Get coarse-grained sentiment score
 def get_coarse_score(text, word2vec_model):
+    word_seg = word_segment(text)
+    sim_word, sim_word_weight = get_coarse_simtiment_score(text, word2vec_model)
+    score = 0
+    for i, j in zip(sim_word, sim_word_weight):
+        score += get_word_sentiment_score_addition(i) * j
+    return sigmoid(score)
+
+def get_coarse_score_LDA(text, word2vec_model):
     word_seg = word_segment(text)
     sim_word, sim_word_weight = get_coarse_simtiment_score(text, word2vec_model)
     score = 0
