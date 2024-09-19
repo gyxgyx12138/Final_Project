@@ -8,7 +8,8 @@ from helper.utils import dataloader_to_dataframe, read_and_process_csv, read_dat
 # from model.DeepCGSR.train import DeepCGSR
 from model.DeepCGSR.review_processing.coarse_gain import get_word2vec_model
 from model.DeepCGSR.train import DeepCGSR, csv_to_dataloader, test, test_rsme, train_deepcgsr
-from model.MFFR.train_MFFR import MFFR
+from model.MFFR.train_MFFR import evaluate_MFFR, MFFR
+from model.MFFR.SAMF import update_ratings_with_sentiment, train_sentiment_model, get_sentiment_scores
 
 
 # from model.DeepCGSR.train import train
@@ -68,12 +69,12 @@ def create_dataframes(json_file, train_ratio=0.7, valid_ratio=0.1, test_ratio=0.
     return df, train_df, valid_df, test_df
 
 # Ví dụ sử dụng
-dataset_name = "Small_Digital_Music_5_1"
+dataset_name = "Small_Digital_Music_5_0"
 json_file = "model/DeepCGSR/data/" + dataset_name + ".json"
 batch_size = 32
 num_epochs = 100
 # num_factors = 16
-list_factors = [8, 16, 32, 40]
+list_factors = [10, 20, 30, 40, 50]
 num_words = 300
 is_switch_data = True
 rsme_MFFR = 0
@@ -85,47 +86,62 @@ for num_factors in list_factors:
     # train_loader, valid_loader, test_loader = create_dataloaders(json_file, batch_size)
     all_df, train_df, valid_df, test_df = create_dataframes(json_file)
 
-    #region DeepCGSR 
-    # method_name = ["DeepCGSR", "triet_method"]
-    method_name = ["DeepCGSR"]
-    for method in method_name:
-        print("Method: ", method)
-        
-        DeepCGSR(train_df, num_factors, num_words, "train", method, is_switch_data)
-        DeepCGSR(valid_df, num_factors, num_words, "vaild", method, is_switch_data)
-        DeepCGSR(test_df, num_factors, num_words, "test", method, is_switch_data)
+    # # region DeepCGSR 
 
-        final_feature_train_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
-        final_feature_valid_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
-        final_feature_test_path = "model/DeepCGSR/data/final_data_feature_" + method + "_test.csv"
+    # method_name = ["triet_method","DeepCGSR"]
+    # for method in method_name:
+    #     print("Method: ", method)
+        
+    #     DeepCGSR(train_df, num_factors, num_words, "train", method, is_switch_data)
+    #     DeepCGSR(valid_df, num_factors, num_words, "vaild", method, is_switch_data)
+    #     DeepCGSR(test_df, num_factors, num_words, "test", method, is_switch_data)
 
-        train_data_loader = csv_to_dataloader(final_feature_train_path, batch_size)
-        valid_data_loader = csv_to_dataloader(final_feature_valid_path, batch_size)
-        test_data_loader = csv_to_dataloader(final_feature_test_path, batch_size)
+    #     final_feature_train_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
+    #     final_feature_valid_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
+    #     final_feature_test_path = "model/DeepCGSR/data/final_data_feature_" + method + "_test.csv"
+
+    #     train_data_loader = csv_to_dataloader(final_feature_train_path, batch_size)
+    #     valid_data_loader = csv_to_dataloader(final_feature_valid_path, batch_size)
+    #     test_data_loader = csv_to_dataloader(final_feature_test_path, batch_size)
         
-        model_deep = train_deepcgsr(train_data_loader, valid_data_loader, num_factors, batch_size, num_epochs, method, log_interval=100)
-        auc_test = test(model_deep, test_data_loader)
-        rsme_test, mae_test = test_rsme(model_deep, test_data_loader)
-        DeepCGSR_results = [auc_test, rsme_test, mae_test]
+    #     model_deep = train_deepcgsr(train_data_loader, valid_data_loader, num_factors, batch_size, num_epochs, method, log_interval=100)
+    #     auc_test = test(model_deep, test_data_loader)
+    #     rsme_test, mae_test = test_rsme(model_deep, test_data_loader)
+    #     DeepCGSR_results = [auc_test, rsme_test, mae_test]
         
-        save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test', 'MAE Test'], "model/results/"+ method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
-    #endregion
+    #     save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test', 'MAE Test'], "model/results/"+ method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
+    # #endregion
 
     #region MFFR
-    method_name = "MFFR"
-    test_df = pd.concat([test_df, valid_df], ignore_index=True)
-    rsme_new, mae_new, f1_new = MFFR(train_df, test_df, num_factors, 15)
-    rsme_MFFR += rsme_new
-    mae_MFFR += mae_new
-    f1_MFFR += f1_new
-    MFFR_results = [f1_new, rsme_new]
-    save_to_excel([MFFR_results], ['AUC', 'RSME Test'], "model/results/"+  method_name + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
+    method_name = ["SAMF", "MFFR"]
+    for method in method_name:
+        rsme_MFFR = 0
+        mae_MFFR = 0
+        f1_MFFR = 0
+        loop = 1
+        for i in range(loop):
+            print("Method: ", method)
+            train_df = pd.concat([train_df, valid_df], ignore_index=True)
+            predicted_ratings, R_test, U, V = MFFR(train_df, test_df, num_factors, num_epochs)
+            if method == "SAMF":
+                print("Training Sentiment Model")
+                sentiment_model = train_sentiment_model(train_df['reviewText'].astype(str), train_df['overall'])
+                sentiment_scores = get_sentiment_scores(train_df['reviewText'].astype(str), sentiment_model)
+                predicted_ratings = update_ratings_with_sentiment(predicted_ratings, sentiment_scores)
+                print("Updated Rating Matrix:", predicted_ratings)
+            rsme_new, mae_new, f1_new = evaluate_MFFR(predicted_ratings, R_test, U, V)
+            rsme_MFFR += rsme_new
+            mae_MFFR += mae_new
+            f1_MFFR += f1_new
+            # MFFR_results = [f1_new, rsme_new, mae_new]
+        MFFR_results = [f1_MFFR/loop, rsme_MFFR/loop, mae_MFFR/loop]    
+        save_to_excel([MFFR_results], ['AUC', 'RSME Test', 'MAE'], "model/results/"+  method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
     #endregion
         
     backup_and_delete_files("model/DeepCGSR/feature", "model/DeepCGSR/backup", "BKfeature", "290824", extensions=[".csv"])
     backup_and_delete_files("model/DeepCGSR/feature_originalmethod", "model/DeepCGSR/backup", "BKfeature_originalmethod", "290824", extensions=[".csv"])
     backup_and_delete_files("model/DeepCGSR/data", "model/DeepCGSR/backup", "BKdata", "290824", extensions=[".csv"])
-    backup_and_delete_files("model/DeepCGSR/chkpt", "model/DeepCGSR/backup", "BK_chkpt", "290824", extensions=[".pt", ".pkl", "npz"])
+    backup_and_delete_files("model/DeepCGSR/chkpt", "model/DeepCGSR/backup", "BK_chkpt", "290824", True, extensions=[".pt", ".pkl", "npz"])
     backup_and_delete_files("model/DeepCGSR/output", "model/DeepCGSR/backup", "BK_output", "290824", extensions=[".model"])
 
 

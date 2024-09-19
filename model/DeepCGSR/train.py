@@ -407,10 +407,12 @@ def DeepCGSR(dataset_df, num_factors, num_words, filename, method_name="DeepCGSR
         # u_deep = Calculate_Deep(v_list, z_review, 0)
         # i_deep = Calculate_Deep(v_list, z_item, len(z_review))
         for (z_name, z_value), v_value  in zip(z_review.items(), v_reviewer_list):
-            u_deep[z_name] = merge_features_mf(z_value, v_value, num_factors * 2)
+            #u_deep[z_name] = merge_features_mf(z_value, v_value, num_factors * 2)
+            u_deep[z_name] = Calculate_Deep(z_value, v_value)
 
         for (z_name, z_value), v_value in zip(z_item.items(), v_item_list):
-            i_deep[z_name] = merge_features_mf(z_value, v_value, num_factors * 2)
+            #i_deep[z_name] = merge_features_mf(z_value, v_value, num_factors * 2)
+            i_deep[z_name] = Calculate_Deep(z_value, v_value)
         
         
         # svd = initialize_svd(allreviews_path + filename + ".csv", num_factors * 2, svd_path + filename +'.pt')

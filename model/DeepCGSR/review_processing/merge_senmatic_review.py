@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from helper.general_functions import create_and_write_csv, load_data_from_csv, split_text
 from model.DeepCGSR.init import dep_parser
-from coarse_gain import get_coarse_score, get_coarse_score_LDA
+from coarse_gain import get_coarse_score, get_coarse_score_LDA, get_coarse_sentiment_score
 from fine_gain import get_tbert_model, get_lda_model, get_topic_sentiment_matrix_tbert, get_topic_sentiment_metrix_lda
 
 def merge_fine_coarse_features(data_df, num_factors, groupBy="reviewerID"):
@@ -58,7 +58,9 @@ def extract_review_feature(data_df, dictionary, model, dep_parser, topic_word_ma
                         if chunk and chunk.strip():
                             try:
                                 fine_feature_chunk = get_topic_sentiment_matrix_tbert(chunk, topic_word_matrix, dep_parser, topic_nums=num_topics)
-                                coarse_feature_chunk = get_coarse_score(chunk, word2vec_model)
+                                # coarse_feature_chunk = get_coarse_score(chunk, word2vec_model)
+                                coarse_feature_chunk = get_coarse_sentiment_score(chunk)
+                                # print("text: ", text , " coarse_feature: ", coarse_feature)
                             except KeyError as e:
                                 print(f"Skipping chunk due to missing key in vocabulary: {e}")
                                 continue

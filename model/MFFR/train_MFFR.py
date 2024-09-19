@@ -9,7 +9,7 @@ def evaluate_model(U, V, R_test):
     test_indices = np.nonzero(R_test)
     # print(f'Test indices: {test_indices}')
     R_pred = predict_ratings(U, V)
-    
+    print(f'R_pred: {R_pred}')
     # Lấy các giá trị tại các chỉ số có rating trong R_test
     R_test_nonzero = R_test[test_indices]
     R_pred_nonzero = R_pred[test_indices]
@@ -45,6 +45,8 @@ def convert_and_save_dataset(input_df, output_file_path):
     if 'reviewerID' not in input_df.columns or 'asin' not in input_df.columns or 'overall' not in input_df.columns:
         raise ValueError("Dataset must contain 'reviewerID', 'asin', and 'rating' columns")
     
+    input_df['reviewerID'] = input_df['reviewerID'].astype(str)
+    input_df['asin'] = input_df['asin'].astype(str)
     # Bước 3: Mã hóa các cột reviewerID và asin
     reviewer_encoder = LabelEncoder()
     asin_encoder = LabelEncoder()
@@ -70,11 +72,11 @@ def convert_and_save_dataset(input_df, output_file_path):
 # Example usage
 n_users = 0
 n_items = 0
-alpha = 0.01
-lambda_ = 0.01
-gamma_U = 0.005
-gamma_V = 0.005
-gamma_P = 0.005
+alpha = 0.03
+lambda_ = 0.001
+gamma_U = 0.01
+gamma_V = 0.01
+gamma_P = 0.01
 # learning_rate = 0.05
 top_n = 5
 
@@ -102,11 +104,15 @@ def MFFR(train_df, test_df, n_factors, n_epochs):
         U = U_new
         V = V_new
         P = P_new
-        rmse, mae, f1 = evaluate_model(U, V, R_test)
+        # rmse, mae, f1 = evaluate_model(U, V, R_test)
         # print(f'Epoch {epoch+1}/{n_epochs}, Loss: {loss}')
     predicted_ratings = predict_ratings(U, V)
+
+    return predicted_ratings, R_test, U, V
+
+def evaluate_MFFR(predicted_ratings, R_test, U, V):
     top_n_recommendations = recommend_top_n(predicted_ratings, top_n)
     # print(top_n_recommendations)
     # Evaluate model
     rmse, mae, f1 = evaluate_model(U, V, R_test)
-    return rmse, mae, f1
+    return rmse, mae, f1 
