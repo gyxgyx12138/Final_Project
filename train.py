@@ -75,6 +75,7 @@ batch_size = 32
 num_epochs = 100
 # num_factors = 16
 list_factors = [10, 20, 30, 40, 50]
+list_factors = [10, 20, 30, 40, 50]
 num_words = 300
 is_switch_data = True
 rsme_MFFR = 0
@@ -92,25 +93,25 @@ for num_factors in list_factors:
     for method in method_name:
         print("Method: ", method)
         
-        DeepCGSR(train_df, num_factors, num_words, "train", method, is_switch_data)
-        DeepCGSR(valid_df, num_factors, num_words, "vaild", method, is_switch_data)
-        DeepCGSR(test_df, num_factors, num_words, "test", method, is_switch_data)
+    #     DeepCGSR(train_df, num_factors, num_words, "train", method, is_switch_data)
+    #     DeepCGSR(valid_df, num_factors, num_words, "vaild", method, is_switch_data)
+    #     DeepCGSR(test_df, num_factors, num_words, "test", method, is_switch_data)
 
-        final_feature_train_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
-        final_feature_valid_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
-        final_feature_test_path = "model/DeepCGSR/data/final_data_feature_" + method + "_test.csv"
+    #     final_feature_train_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
+    #     final_feature_valid_path = "model/DeepCGSR/data/final_data_feature_" + method + "_train.csv"
+    #     final_feature_test_path = "model/DeepCGSR/data/final_data_feature_" + method + "_test.csv"
 
-        train_data_loader = csv_to_dataloader(final_feature_train_path, batch_size)
-        valid_data_loader = csv_to_dataloader(final_feature_valid_path, batch_size)
-        test_data_loader = csv_to_dataloader(final_feature_test_path, batch_size)
+    #     train_data_loader = csv_to_dataloader(final_feature_train_path, batch_size)
+    #     valid_data_loader = csv_to_dataloader(final_feature_valid_path, batch_size)
+    #     test_data_loader = csv_to_dataloader(final_feature_test_path, batch_size)
         
-        model_deep = train_deepcgsr(train_data_loader, valid_data_loader, num_factors, batch_size, num_epochs, method, log_interval=100)
-        auc_test = test(model_deep, test_data_loader)
-        rsme_test, mae_test = test_rsme(model_deep, test_data_loader)
-        DeepCGSR_results = [auc_test, rsme_test, mae_test]
+    #     model_deep = train_deepcgsr(train_data_loader, valid_data_loader, num_factors, batch_size, num_epochs, method, log_interval=100)
+    #     auc_test = test(model_deep, test_data_loader)
+    #     rsme_test, mae_test = test_rsme(model_deep, test_data_loader)
+    #     DeepCGSR_results = [auc_test, rsme_test, mae_test]
         
-        save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test', 'MAE Test'], "model/results/"+ method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
-    #endregion
+    #     save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test', 'MAE Test'], "model/results/"+ method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
+    # #endregion
 
     # #region MFFR
     # method_name = ["MFFR", "SAMF"]

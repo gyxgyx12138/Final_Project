@@ -5,6 +5,7 @@ import pandas as pd
 from helper.general_functions import create_and_write_csv, load_data_from_csv, split_text
 from model.DeepCGSR.init import dep_parser
 from coarse_gain import get_coarse_score, get_coarse_score_LDA, get_coarse_sentiment_score
+from coarse_gain import get_coarse_score, get_coarse_score_LDA, get_coarse_sentiment_score
 from fine_gain import get_tbert_model, get_lda_model, get_topic_sentiment_matrix_tbert, get_topic_sentiment_metrix_lda
 
 def merge_fine_coarse_features(data_df, num_factors, groupBy="reviewerID"):

@@ -134,12 +134,15 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='
 
     cleaned_data = data_df.dropna(subset=['filteredReviewText', 'overall_new'])
     # cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
+    # cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
     cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
+    
     
     # Lấy danh sách reviews và labels từ dữ liệu đã làm sạch và chuyển đổi
     texts = cleaned_data['filteredReviewText'].tolist()
     labels = cleaned_data['overall_new'].tolist()
 
+    model, tokenizer = fine_tune_bert(texts, labels, num_labels=5, epochs=2)
     model, tokenizer = fine_tune_bert(texts, labels, num_labels=5, epochs=2)
     
     # Tokenize and get BERT embeddings for each document
@@ -189,6 +192,22 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='
 
         # Skip if no valid documents remain for the cluster
         if not cluster_texts:
+            topic_to_words.append([])
+            continue
+        
+        # Further filter documents that are empty after stop-word removal
+        valid_cluster_texts = []
+        vectorizer_temp = CountVectorizer(stop_words='english')
+        for text in cluster_texts:
+            try:
+                if vectorizer_temp.fit_transform([text]).shape[1] > 0:  # Ensure some valid tokens exist
+                    valid_cluster_texts.append(text)
+            except ValueError:
+                print("Error processing text:", text)
+                continue
+            
+        # Skip if no valid documents after filtering
+        if not valid_cluster_texts:
             topic_to_words.append([])
             continue
         

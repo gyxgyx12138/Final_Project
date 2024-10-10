@@ -83,6 +83,8 @@ def convert_and_save_dataset(input_df, output_file_path):
     
     input_df['reviewerID'] = input_df['reviewerID'].astype(str)
     input_df['asin'] = input_df['asin'].astype(str)
+    input_df['reviewerID'] = input_df['reviewerID'].astype(str)
+    input_df['asin'] = input_df['asin'].astype(str)
     # Bước 3: Mã hóa các cột reviewerID và asin
     reviewer_encoder = LabelEncoder()
     asin_encoder = LabelEncoder()
@@ -168,6 +170,7 @@ def MFFR(train_df, test_df, n_factors, n_epochs):
         U = U_new
         V = V_new
         P = P_new
+        # rmse, mae, f1 = evaluate_model(U, V, R_test)
         # rmse, mae, f1 = evaluate_model(U, V, R_test)
         # print(f'Epoch {epoch+1}/{n_epochs}, Loss: {loss}')
     predicted_ratings = predict_ratings(U, V)
