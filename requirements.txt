@@ -1,6 +1,7 @@
 absl-py==2.1.0
 accelerate==0.29.2
 annotated-types==0.6.0
+anyascii==0.3.2
 asttokens==2.4.1
 astunparse==1.6.3
 beautifulsoup4==4.12.3
@@ -18,6 +19,7 @@ comm==0.2.1
 confection==0.1.4
 conllu==4.5.3
 contourpy==1.2.0
+contractions==0.1.73
 cycler==0.12.1
 cymem==2.0.8
 debugpy==1.8.0
@@ -109,6 +111,7 @@ protobuf==4.25.2
 psutil==5.9.8
 ptyprocess==0.7.0
 pure-eval==0.2.2
+pyahocorasick==2.1.0
 pyarrow==15.0.0
 pyasn1==0.5.1
 pyasn1-modules==0.3.0
@@ -159,6 +162,7 @@ tensorflow-estimator==2.15.0
 tensorflow-io-gcs-filesystem==0.36.0
 termcolor==2.4.0
 textblob==0.18.0.post0
+textsearch==0.0.24
 tf_keras==2.16.0
 thinc==8.2.3
 threadpoolctl==3.2.0
@@ -177,6 +181,7 @@ tzdata==2023.4
 umap==0.1.1
 umap-learn==0.5.6
 urllib3==1.26.18
+vaderSentiment==3.3.2
 wasabi==1.1.2
 wcwidth==0.2.13
 weasel==0.3.4
