@@ -8,6 +8,7 @@ from nltk.corpus import sentiwordnet as swn
 from nltk.parse.stanford import StanfordDependencyParser
 from sklearn.cluster import KMeans, Birch, DBSCAN, MeanShift, BisectingKMeans
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.metrics import silhouette_score
 from transformers import BertTokenizer, BertModel
 import torch
 import sys
@@ -161,7 +162,7 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='
     # Clustering to find topics
     if cluster_method == 'Kmeans':
         print("Kmeans")
-        clustering = KMeans(n_clusters=num_topics, random_state=0).fit(embeddings.numpy())
+        clustering = KMeans(n_clusters=num_topics, random_state=42).fit(embeddings.numpy())
         labels = clustering.labels_
     elif cluster_method == 'Birch':
         print("Birch")
@@ -179,7 +180,15 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='
         print("BisectingKMeans")
         clustering = BisectingKMeans(n_clusters=num_topics, random_state=0).fit(embeddings.numpy())
         labels = clustering.labels_
+    silhouette_score_val = silhouette_score(embeddings.numpy(), labels)
+    evaluation_df = pd.DataFrame({
+        'num_topics': [num_topics],
+        'silhouette_score_val': [silhouette_score_val]
+    })
 
+    # Lưu vào file CSV
+    file_path = 'model/DeepCGSR/evaluation_clustering/silhouette_score.csv'
+    evaluation_df.to_csv(file_path, index=False)
     # Extract top words for each topic
     topic_to_words = []
     for i in range(num_topics):
