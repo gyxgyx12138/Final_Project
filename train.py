@@ -69,7 +69,7 @@ def create_dataframes(json_file, train_ratio=0.7, valid_ratio=0.1, test_ratio=0.
     return df, train_df, valid_df, test_df
 
 # Ví dụ sử dụng
-dataset_name = "Small_Toys_and_Games_5_0"
+dataset_name = "Small_All_Beauty_5_0"
 json_file = "model/DeepCGSR/data/" + dataset_name + ".json"
 batch_size = 32
 num_epochs = 100
