@@ -6,8 +6,8 @@ from gensim import corpora
 from gensim.models import LdaModel
 from nltk.corpus import sentiwordnet as swn
 from nltk.parse.stanford import StanfordDependencyParser
-from sklearn.cluster import KMeans
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans, Birch, DBSCAN, MeanShift, BisectingKMeans
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from transformers import BertTokenizer, BertModel
 import torch
 import sys
@@ -130,16 +130,17 @@ def fine_tune_bert(texts, labels, num_labels, epochs=3, batch_size=8, max_len=51
 
 
 # Load pre-trained BERT model and tokenizer
-def get_tbert_model(data_df, split_data, num_topics, num_words, is_switch_data=False):
+def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='Kmeans'):
 
     cleaned_data = data_df.dropna(subset=['filteredReviewText', 'overall_new'])
+    # cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
     cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
-
+    
     # Lấy danh sách reviews và labels từ dữ liệu đã làm sạch và chuyển đổi
     texts = cleaned_data['filteredReviewText'].tolist()
     labels = cleaned_data['overall_new'].tolist()
 
-    model, tokenizer = fine_tune_bert(texts, labels, num_labels=2, epochs=2)
+    model, tokenizer = fine_tune_bert(texts, labels, num_labels=5, epochs=2)
     
     # Tokenize and get BERT embeddings for each document
     def get_bert_embeddings(texts):
@@ -156,8 +157,26 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, is_switch_data=F
     embeddings = torch.vstack(embeddings)
 
     # Clustering to find topics
-    kmeans = KMeans(n_clusters=num_topics, random_state=0).fit(embeddings.numpy())
-    labels = kmeans.labels_
+    if cluster_method == 'Kmeans':
+        print("Kmeans")
+        clustering = KMeans(n_clusters=num_topics, random_state=0).fit(embeddings.numpy())
+        labels = clustering.labels_
+    elif cluster_method == 'Birch':
+        print("Birch")
+        clustering = Birch(n_clusters=num_topics).fit(embeddings.numpy())
+        labels = clustering.labels_
+    elif cluster_method == 'DBSCAN':
+        print("DBSCAN")
+        clustering = DBSCAN(eps=3, min_samples=num_topics).fit(embeddings.numpy())
+        labels = clustering.labels_
+    elif cluster_method == 'MeanShift':
+        print("MeanShift")
+        clustering = MeanShift(bandwidth=num_topics).fit(embeddings.numpy())
+        labels = clustering.labels_
+    elif cluster_method == 'BisectingKMeans':
+        print("BisectingKMeans")
+        clustering = BisectingKMeans(n_clusters=num_topics, random_state=0).fit(embeddings.numpy())
+        labels = clustering.labels_
 
     # Extract top words for each topic
     topic_to_words = []
@@ -172,7 +191,22 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, is_switch_data=F
         if not cluster_texts:
             topic_to_words.append([])
             continue
-
+        
+        # Further filter documents that are empty after stop-word removal
+        valid_cluster_texts = []
+        vectorizer_temp = CountVectorizer(stop_words='english')
+        for text in cluster_texts:
+            try:
+                if vectorizer_temp.fit_transform([text]).shape[1] > 0:  # Ensure some valid tokens exist
+                    valid_cluster_texts.append(text)
+            except ValueError:
+                print("Error processing text:", text)
+                continue
+            
+        # Skip if no valid documents after filtering
+        if not valid_cluster_texts:
+            topic_to_words.append([])
+            continue
         # Proceed with vectorization
         vectorizer = TfidfVectorizer(max_features=num_words, stop_words='english')
         tfidf_matrix = vectorizer.fit_transform(cluster_texts)
@@ -185,7 +219,7 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, is_switch_data=F
     # Create a dummy dictionary for compatibility
     dictionary = corpora.Dictionary(split_data)
     # corpus = [dictionary.doc2bow(text) for text in split_data]
-    return embeddings, model, kmeans, dictionary, topic_to_words
+    return embeddings, model, clustering, dictionary, tokenizer, topic_to_words
 
 def get_lda_model(split_data, num_topics, num_words):
     dictionary = corpora.Dictionary(split_data)

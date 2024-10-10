@@ -8,7 +8,8 @@ from helper.utils import dataloader_to_dataframe, read_and_process_csv, read_dat
 # from model.DeepCGSR.train import DeepCGSR
 from model.DeepCGSR.review_processing.coarse_gain import get_word2vec_model
 from model.DeepCGSR.train import DeepCGSR, csv_to_dataloader, test, test_rsme, train_deepcgsr
-from model.MFFR.train_MFFR import MFFR
+from model.MFFR.train_MFFR import evaluate_MFFR, MFFR
+from model.MFFR.SAMF import update_ratings_with_sentiment, get_sentiment_scores, load_bert_model
 
 
 # from model.DeepCGSR.train import train
@@ -68,12 +69,12 @@ def create_dataframes(json_file, train_ratio=0.7, valid_ratio=0.1, test_ratio=0.
     return df, train_df, valid_df, test_df
 
 # Ví dụ sử dụng
-dataset_name = "Small_Digital_Music_5_1"
+dataset_name = "Small_Toys_and_Games_5_0"
 json_file = "model/DeepCGSR/data/" + dataset_name + ".json"
 batch_size = 32
 num_epochs = 100
 # num_factors = 16
-list_factors = [8, 16, 32, 40]
+list_factors = [10, 20, 30, 40, 50]
 num_words = 300
 is_switch_data = True
 rsme_MFFR = 0
@@ -86,8 +87,8 @@ for num_factors in list_factors:
     all_df, train_df, valid_df, test_df = create_dataframes(json_file)
 
     #region DeepCGSR 
-    # method_name = ["DeepCGSR", "triet_method"]
-    method_name = ["DeepCGSR"]
+
+    method_name = ["triet_method","DeepCGSR"]
     for method in method_name:
         print("Method: ", method)
         
@@ -111,21 +112,37 @@ for num_factors in list_factors:
         save_to_excel([DeepCGSR_results], ['AUC', 'RSME Test', 'MAE Test'], "model/results/"+ method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
     #endregion
 
-    #region MFFR
-    method_name = "MFFR"
-    test_df = pd.concat([test_df, valid_df], ignore_index=True)
-    rsme_new, mae_new, f1_new = MFFR(train_df, test_df, num_factors, 15)
-    rsme_MFFR += rsme_new
-    mae_MFFR += mae_new
-    f1_MFFR += f1_new
-    MFFR_results = [f1_new, rsme_new]
-    save_to_excel([MFFR_results], ['AUC', 'RSME Test'], "model/results/"+  method_name + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
-    #endregion
+    # #region MFFR
+    # method_name = ["MFFR", "SAMF"]
+    # for method in method_name:
+    #     rsme_MFFR = 0
+    #     mae_MFFR = 0
+    #     f1_MFFR = 0
+    #     loop = 4
+    #     for i in range(loop):
+    #         print("Method: ", method)
+    #         test_df = pd.concat([test_df, valid_df], ignore_index=True)
+    #         # train_df = pd.concat([train_df, test_df, valid_df], ignore_index=True)
+    #         predicted_ratings, R_test = MFFR(train_df, test_df, num_factors, 100)
+    #         if method == "SAMF":
+    #             print("Training Sentiment Model")
+    #             tokenizer, sentiment_model = load_bert_model()
+    #             sentiment_scores = get_sentiment_scores(train_df['reviewText'].astype(str), tokenizer, sentiment_model)
+    #             predicted_ratings = update_ratings_with_sentiment(predicted_ratings, sentiment_scores)
+    #             print("Updated Rating Matrix:", predicted_ratings)
+    #         rsme_new, mae_new, f1_new = evaluate_MFFR(predicted_ratings, R_test)
+    #         rsme_MFFR += rsme_new
+    #         mae_MFFR += mae_new
+    #         f1_MFFR += f1_new
+    #         # MFFR_results = [f1_new, rsme_new, mae_new]
+    #     MFFR_results = [f1_MFFR/loop, rsme_MFFR/loop, mae_MFFR/loop]    
+    #     save_to_excel([MFFR_results], ['AUC', 'RSME Test', 'MAE'], "model/results/"+  method + "_" + dataset_name + "_factors" + str(num_factors) + ".xlsx")
+    # #endregion
         
     backup_and_delete_files("model/DeepCGSR/feature", "model/DeepCGSR/backup", "BKfeature", "290824", extensions=[".csv"])
     backup_and_delete_files("model/DeepCGSR/feature_originalmethod", "model/DeepCGSR/backup", "BKfeature_originalmethod", "290824", extensions=[".csv"])
     backup_and_delete_files("model/DeepCGSR/data", "model/DeepCGSR/backup", "BKdata", "290824", extensions=[".csv"])
-    backup_and_delete_files("model/DeepCGSR/chkpt", "model/DeepCGSR/backup", "BK_chkpt", "290824", extensions=[".pt", ".pkl", "npz"])
+    backup_and_delete_files("model/DeepCGSR/chkpt", "model/DeepCGSR/backup", "BK_chkpt", "290824", False, extensions=[".pt", ".pkl", "npz"])
     backup_and_delete_files("model/DeepCGSR/output", "model/DeepCGSR/backup", "BK_output", "290824", extensions=[".model"])
 
 

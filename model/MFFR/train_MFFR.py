@@ -5,11 +5,23 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import mean_squared_error, mean_absolute_error, f1_score
 from math import sqrt
 
-def evaluate_model(U, V, R_test):
+# Sigmoid function as a non-linear mapping 'g'
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+# Derivative of the sigmoid function
+def sigmoid_derivative(x):
+    return sigmoid(x) * (1 - sigmoid(x))
+    
+def convert_to_range_1_5(x):
+    # Convert a value from the range [0, 1] to the range [1, 5]
+    return 4 * x + 1
+
+def evaluate_model(R_pred, R_test):
     test_indices = np.nonzero(R_test)
     # print(f'Test indices: {test_indices}')
-    R_pred = predict_ratings(U, V)
-    
+
+    print(f'R_pred: {R_pred}')
     # Lấy các giá trị tại các chỉ số có rating trong R_test
     R_test_nonzero = R_test[test_indices]
     R_pred_nonzero = R_pred[test_indices]
@@ -26,6 +38,30 @@ def evaluate_model(U, V, R_test):
     f1 = f1_score(R_test_nonzero_filtered, R_pred_nonzero_filtered)
     print(f'RMSE: {rmse}, MAE: {mae}, F1: {f1}')
     return rmse, mae, f1
+
+def compute_loss(U, V, P, R_train, S, lambda_U, lambda_V, lambda_P, alpha_u):
+    # Rating loss (MSE) for ratings R
+    rating_loss = 0
+    for i in range(U.shape[0]):
+        for j in range(V.shape[0]):
+            if R_train[i, j] != 0:
+                predicted_rating = sigmoid(np.dot(U[i], V[j]))
+                rating_loss += (R_train[i, j] - predicted_rating) ** 2
+
+    # Preference loss (MSE) for preferences S
+    preference_loss = 0
+    for i in range(U.shape[0]):
+        for l in range(P.shape[0]):
+            if S[i, l] != 0:
+                predicted_preference = sigmoid(np.dot(U[i], P[l]))
+                preference_loss += (S[i, l] - predicted_preference) ** 2
+
+    # Regularization terms
+    reg_loss = (lambda_U * np.sum(U ** 2)) + (lambda_V * np.sum(V ** 2)) + (lambda_P * np.sum(P ** 2))
+
+    # Total loss (including weighted preference loss)
+    total_loss = rating_loss + alpha_u * preference_loss + reg_loss
+    return total_loss
 
 
 def precision_at_k(U, V, R_test, k):
@@ -45,6 +81,8 @@ def convert_and_save_dataset(input_df, output_file_path):
     if 'reviewerID' not in input_df.columns or 'asin' not in input_df.columns or 'overall' not in input_df.columns:
         raise ValueError("Dataset must contain 'reviewerID', 'asin', and 'rating' columns")
     
+    input_df['reviewerID'] = input_df['reviewerID'].astype(str)
+    input_df['asin'] = input_df['asin'].astype(str)
     # Bước 3: Mã hóa các cột reviewerID và asin
     reviewer_encoder = LabelEncoder()
     asin_encoder = LabelEncoder()
@@ -70,18 +108,46 @@ def convert_and_save_dataset(input_df, output_file_path):
 # Example usage
 n_users = 0
 n_items = 0
-alpha = 0.01
-lambda_ = 0.01
-gamma_U = 0.005
-gamma_V = 0.005
-gamma_P = 0.005
-# learning_rate = 0.05
-top_n = 5
+
+
+# Hyperparameters
+batch_size = 32
+alpha_u = 0.5
+lambda_ = 0.001
+gamma_U = 0.01
+gamma_V = 0.01
+gamma_P = 0.01
+lambda_U = 0.1
+lambda_V = 0.1
+lambda_P = 0.1
+alpha = 0.03
+
+def get_test_predictions(predicted_ratings, df_test, user_index_mapping, item_index_mapping, R_test_shape):
+    # Extract user-item pairs from df_test
+    user_ids = df_test['reviewerID'].map(user_index_mapping)
+    item_ids = df_test['asin'].map(item_index_mapping)
+    
+    # Check for any unmapped IDs (NaNs) and filter them out
+    mask = (~user_ids.isna()) & (~item_ids.isna())
+    user_ids = user_ids[mask].astype(int).to_numpy()
+    item_ids = item_ids[mask].astype(int).to_numpy()
+
+    # Initialize an empty array to store predictions with the same shape as R_test
+    test_predictions = np.zeros(R_test_shape)
+
+    # Ensure `predicted_ratings` is 2-dimensional
+    if predicted_ratings.ndim != 2:
+        raise ValueError("predicted_ratings must be a 2-dimensional array (matrix)")
+
+    # Fill `test_predictions` using the indices from `user_ids` and `item_ids`
+    for i in range(len(user_ids)):
+        test_predictions[user_ids[i], item_ids[i]] = predicted_ratings[user_ids[i], item_ids[i]]
+
+    return test_predictions
 
 
 
 def MFFR(train_df, test_df, n_factors, n_epochs):
-
     item_review_list = train_df.groupby("asin")["reviewText"].apply(list)
     user_review_list = train_df.groupby("reviewerID")["reviewText"].apply(list)
     item_topic_features = extract_topic_features(item_review_list, n_factors)
@@ -102,11 +168,15 @@ def MFFR(train_df, test_df, n_factors, n_epochs):
         U = U_new
         V = V_new
         P = P_new
-        rmse, mae, f1 = evaluate_model(U, V, R_test)
+        # rmse, mae, f1 = evaluate_model(U, V, R_test)
         # print(f'Epoch {epoch+1}/{n_epochs}, Loss: {loss}')
     predicted_ratings = predict_ratings(U, V)
-    top_n_recommendations = recommend_top_n(predicted_ratings, top_n)
+
+    return predicted_ratings, R_test
+
+def evaluate_MFFR(predicted_ratings, R_test):
+    # top_n_recommendations = recommend_top_n(predicted_ratings, top_n)
     # print(top_n_recommendations)
     # Evaluate model
-    rmse, mae, f1 = evaluate_model(U, V, R_test)
-    return rmse, mae, f1
+    rmse, mae, f1 = evaluate_model(predicted_ratings, R_test)
+    return rmse, mae, f1 

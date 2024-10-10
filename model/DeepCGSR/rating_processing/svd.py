@@ -99,6 +99,13 @@ class SVD():
     def get_user_embedding(self, user_id):
         index = self.users_id_dict[user_id]
         return self.emb_user[index, :]
+    # def get_user_embedding(self, user_id):
+    #     user_id = int(user_id)  # Convert to int if needed
+    #     if user_id not in self.users_id_dict:
+    #         print(f"User ID {user_id} not found in users_id_dict.")
+    #         return None
+    #     index = self.users_id_dict[user_id]
+    #     return self.emb_user[index, :]
 
     def get_item_embedding(self, item_id):
         index = self.items_id_dict[item_id]

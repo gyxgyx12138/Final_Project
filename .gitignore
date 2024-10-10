@@ -10,4 +10,5 @@ model/DeepCGSR/feature_originalmethod/
 model/DeepCGSR/backup/
 model/DeepCGSR/data/
 .venv/
-
+model/DeepCGSR/config/stanford-parser-full-2020-11-17/stanford-parser-4.2.0-models.jar
+data/Toys_and_Games_5.json

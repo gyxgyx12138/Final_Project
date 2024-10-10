@@ -151,7 +151,7 @@ def convert_string_to_float_list(string):
         # Trả về một mảng rỗng nếu không thể chuyển đổi
         return np.array([])
     
-def backup_and_delete_files(folder_path, backup_path, backup_folder_name, date, extensions=[".csv"]):
+def backup_and_delete_files(folder_path, backup_path, backup_folder_name, date, removeModelBERT = False, extensions=[".csv"]):
     # Tạo đường dẫn tới thư mục sao lưu
     backup_folder_path = os.path.join(backup_path, backup_folder_name + "_" + date)
     print(f"Thư mục sao lưu: {backup_folder_path}")
@@ -173,7 +173,7 @@ def backup_and_delete_files(folder_path, backup_path, backup_folder_name, date, 
                 # Sao chép tệp vào thư mục sao lưu
                 shutil.copy(file_path, backup_folder_path)
                 print(f"Đã sao chép: {file_path} tới {backup_folder_path}")
-                if file_name == "bert_last_checkpoint.pt":
+                if file_name == "bert_last_checkpoint.pt" and removeModelBERT == False:
                     print(f"Bỏ qua không sao lưu và xóa: {file_path}")
                     continue
                 # Xóa tệp từ thư mục gốc

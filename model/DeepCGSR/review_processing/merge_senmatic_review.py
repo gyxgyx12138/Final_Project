@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from helper.general_functions import create_and_write_csv, load_data_from_csv, split_text
 from model.DeepCGSR.init import dep_parser
-from coarse_gain import get_coarse_score, get_coarse_score_LDA
+from coarse_gain import get_coarse_score, get_coarse_score_LDA, get_coarse_sentiment_score
 from fine_gain import get_tbert_model, get_lda_model, get_topic_sentiment_matrix_tbert, get_topic_sentiment_metrix_lda
 
 def merge_fine_coarse_features(data_df, num_factors, groupBy="reviewerID"):
@@ -25,7 +25,7 @@ def merge_fine_coarse_features(data_df, num_factors, groupBy="reviewerID"):
     return feature_dict
 
 # Extract fine-grained and coarse-grained features
-def extract_review_feature(data_df, dictionary, model, dep_parser, topic_word_matrix, word2vec_model, num_topics, method_name="DeepCGSR", is_switch_data = False):
+def extract_review_feature(data_df, dictionary, model, dep_parser, tokenizer, topic_word_matrix, word2vec_model, num_topics, method_name="DeepCGSR", is_switch_data = False):
     row_list = []
     print("data_train_size: ", data_df.shape[0])
     for asin, df in tqdm.tqdm(data_df.groupby("asin")):
@@ -58,7 +58,9 @@ def extract_review_feature(data_df, dictionary, model, dep_parser, topic_word_ma
                         if chunk and chunk.strip():
                             try:
                                 fine_feature_chunk = get_topic_sentiment_matrix_tbert(chunk, topic_word_matrix, dep_parser, topic_nums=num_topics)
-                                coarse_feature_chunk = get_coarse_score(chunk, word2vec_model)
+                                # coarse_feature_chunk = get_coarse_score(chunk, word2vec_model)
+                                coarse_feature_chunk = get_coarse_sentiment_score(model, tokenizer, chunk)
+                                # print("text: ", text , " coarse_feature: ", coarse_feature)
                             except KeyError as e:
                                 print(f"Skipping chunk due to missing key in vocabulary: {e}")
                                 continue
@@ -125,10 +127,11 @@ def extract_features(data_df, split_data, word2vec_model, num_topics, num_words,
         allFeatureReview = pd.read_csv(allreviews_path + filename +".csv")
     else:
         if(method_name == "DeepCGSR"):
+            tokenizer = None
             model, dictionary, topic_word_matrix = get_lda_model(split_data, num_topics, num_words)
         else:
-            embeddings, model, kmeans, dictionary, topic_word_matrix = get_tbert_model(data_df, split_data, num_topics, num_words, is_switch_data)
-        allFeatureReview = extract_review_feature(data_df, dictionary, model, dep_parser, topic_word_matrix, word2vec_model, num_topics, method_name, is_switch_data)
+            embeddings, model, kmeans, dictionary, tokenizer, topic_word_matrix = get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method="Kmeans")
+        allFeatureReview = extract_review_feature(data_df, dictionary, model, dep_parser, tokenizer, topic_word_matrix, word2vec_model, num_topics, method_name, is_switch_data)
         allFeatureReview.to_csv(allreviews_path + filename +".csv", index=False)
     return allFeatureReview
 # run
