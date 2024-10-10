@@ -143,7 +143,6 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='
     labels = cleaned_data['overall_new'].tolist()
 
     model, tokenizer = fine_tune_bert(texts, labels, num_labels=5, epochs=2)
-    model, tokenizer = fine_tune_bert(texts, labels, num_labels=5, epochs=2)
     
     # Tokenize and get BERT embeddings for each document
     def get_bert_embeddings(texts):
