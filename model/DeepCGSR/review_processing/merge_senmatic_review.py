@@ -158,7 +158,7 @@ def extract_features(data_df, split_data, word2vec_model, num_topics, num_words,
             tokenizer = None
             model, dictionary, topic_word_matrix = get_lda_model(split_data, num_topics, num_words)
         else:
-            embeddings, model, kmeans, dictionary, tokenizer, topic_word_matrix = get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method="Kmeans")
+            embeddings, model, kmeans, dictionary, tokenizer, topic_word_matrix = get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method="DBSCAN")
         allFeatureReview = extract_review_feature(data_df, dictionary, model, dep_parser, tokenizer, topic_word_matrix, word2vec_model, num_topics, method_name, is_switch_data)
         allFeatureReview.to_csv(allreviews_path + filename +".csv", index=False)
     return allFeatureReview

@@ -74,7 +74,7 @@ json_file = "model/DeepCGSR/data/" + dataset_name + ".json"
 batch_size = 32
 num_epochs = 100
 # num_factors = 16
-list_factors = [8, 16, 32, 40]
+list_factors = [40, 8]
 num_words = 300
 is_switch_data = True
 rsme_MFFR = 0
@@ -88,7 +88,7 @@ for num_factors in list_factors:
 
     #region DeepCGSR 
 
-    method_name = ["triet_method"]
+    method_name = ["triet_method", "DeepCGSR"]
     for method in method_name:
         print("Method: ", method)
         
