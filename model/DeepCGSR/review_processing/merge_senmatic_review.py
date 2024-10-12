@@ -39,8 +39,8 @@ def merge_fine_coarse_features(data_df, num_factors, groupBy="reviewerID"):
 
 # Extract fine-grained and coarse-grained features
 def extract_review_feature(data_df, dictionary, model, dep_parser, tokenizer, topic_word_matrix, word2vec_model, num_topics, method_name="DeepCGSR", is_switch_data=False):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Thiết lập thiết bị
-    model = model.to(device)  # Chuyển mô hình BERT sang GPU (nếu có)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Thiết lập thiết bị
+    # model = model.to(device)  # Chuyển mô hình BERT sang GPU (nếu có)
     
     row_list = []
     print("data_train_size: ", data_df.shape[0])
@@ -60,7 +60,7 @@ def extract_review_feature(data_df, dictionary, model, dep_parser, tokenizer, to
                 # Convert text về chuỗi rỗng nếu nó là None
                 if text is None:
                     text = ""
-                fine_feature = torch.zeros(num_topics, device=device)  # Giữ tensor trên GPU
+                fine_feature = np.zeros(num_topics)  # Giữ tensor trên GPU
                 coarse_feature = 0
 
                 if method_name == "DeepCGSR":
@@ -68,7 +68,7 @@ def extract_review_feature(data_df, dictionary, model, dep_parser, tokenizer, to
                     coarse_feature = get_coarse_score_LDA(text, word2vec_model)
                     
                     # Sử dụng torch.clamp để giới hạn giá trị trên GPU
-                    fine_feature = torch.clamp(fine_feature, min=-5, max=5)
+                    fine_feature = np.clip(fine_feature, -5, 5)
                 else:
                     text_chunks = split_text(text) if text else [""]
                     count_null = 0
@@ -91,13 +91,14 @@ def extract_review_feature(data_df, dictionary, model, dep_parser, tokenizer, to
                     coarse_feature /= max(1, len(text_chunks) - count_null)
                     
                     # Giới hạn giá trị trên GPU mà không cần chuyển sang NumPy
-                    fine_feature = torch.clamp(fine_feature, min=-5, max=5)
+                    
+                    fine_feature = np.clip(fine_feature, -5, 5)
 
                 new_row = {
                     'reviewerID': reviewerID[i], 
                     'itemID': asin, 
                     'overall': overall[i],
-                    'fine_feature': fine_feature.cpu().numpy(),  # Chuyển về CPU khi lưu trữ hoặc xử lý NumPy
+                    'fine_feature': fine_feature,  # Chuyển về CPU khi lưu trữ hoặc xử lý NumPy
                     'coarse_feature': coarse_feature
                 }
                 row_list.append(new_row)
@@ -157,6 +158,7 @@ def extract_features(data_df, split_data, word2vec_model, num_topics, num_words,
         if(method_name == "DeepCGSR"):
             tokenizer = None
             model, dictionary, topic_word_matrix = get_lda_model(split_data, num_topics, num_words)
+            
         else:
             embeddings, model, kmeans, dictionary, tokenizer, topic_word_matrix = get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method="DBSCAN")
         allFeatureReview = extract_review_feature(data_df, dictionary, model, dep_parser, tokenizer, topic_word_matrix, word2vec_model, num_topics, method_name, is_switch_data)
