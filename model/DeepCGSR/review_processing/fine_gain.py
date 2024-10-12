@@ -71,7 +71,7 @@ def collate_fn(tokenizer):
     return collate_batch
 
 
-def fine_tune_bert(texts, labels, num_labels, epochs=10, batch_size=8, max_len=512, learning_rate=2e-5, save_dir='./model/DeepCGSR/chkpt'):
+def fine_tune_bert(texts, labels, num_labels, epochs=50, batch_size=8, max_len=512, learning_rate=2e-5, save_dir='./model/DeepCGSR/chkpt'):
     # Kiểm tra nếu GPU có sẵn và thiết lập thiết bị
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -160,7 +160,7 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='
     labels = cleaned_data['overall_new'].tolist()
 
     # Fine-tune BERT và chuyển mô hình sang GPU
-    model, tokenizer = fine_tune_bert(texts, labels, num_labels=5, epochs=2)
+    model, tokenizer = fine_tune_bert(texts, labels, num_labels=5, epochs=50)
     model = model.to(device)
     
     # Lấy embeddings từ mô hình BERT
