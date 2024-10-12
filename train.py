@@ -142,7 +142,7 @@ for num_factors in list_factors:
     backup_and_delete_files("model/DeepCGSR/feature", "model/DeepCGSR/backup", "BKfeature", "290824", extensions=[".csv"])
     backup_and_delete_files("model/DeepCGSR/feature_originalmethod", "model/DeepCGSR/backup", "BKfeature_originalmethod", "290824", extensions=[".csv"])
     backup_and_delete_files("model/DeepCGSR/data", "model/DeepCGSR/backup", "BKdata", "290824", extensions=[".csv"])
-    backup_and_delete_files("model/DeepCGSR/chkpt", "model/DeepCGSR/backup", "BK_chkpt", "290824", False, extensions=[".pt", ".pkl", "npz"])
+    backup_and_delete_files("model/DeepCGSR/chkpt", "model/DeepCGSR/backup", "BK_chkpt", "290824", True, extensions=[".pt", ".pkl", "npz"])
     backup_and_delete_files("model/DeepCGSR/output", "model/DeepCGSR/backup", "BK_output", "290824", extensions=[".model"])
 
 
