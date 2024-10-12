@@ -1,11 +1,8 @@
 model/DeepCGSR/config/stanford-corenlp-4.5.7/stanford-corenlp-4.5.7-javadoc.jar
 model/DeepCGSR/config/stanford-corenlp-4.5.7/stanford-corenlp-4.5.7-models.jar
 model/DeepCGSR/config/stanford-corenlp-4.5.7/stanford-corenlp-4.5.7-sources.jar
-model/DeepCGSR/config/stanford-corenlp-4.5.7/stanford-corenlp-4.5.7.jar
 model/DeepCGSR.zip
-model/DeepCGSR/chkpt/
-model/DeepCGSR/feature/
-model/DeepCGSR/feature_originalmethod/
+
 model/DeepCGSR/backup/
 model/DeepCGSR/data/
 .venv/
@@ -13,3 +10,4 @@ model/DeepCGSR/config/stanford-parser-full-2020-11-17/stanford-parser-4.2.0-mode
 data/Toys_and_Games_5.json
 /__pycache__/
 
+model/DeepCGSR/chkpt/bert_last_checkpoint.pt
