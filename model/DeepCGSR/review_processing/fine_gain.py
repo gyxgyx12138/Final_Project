@@ -70,7 +70,12 @@ def collate_fn(tokenizer):
         }
     return collate_batch
 
-def fine_tune_bert(texts, labels, num_labels, epochs=3, batch_size=8, max_len=512, learning_rate=2e-5, save_dir='./model/DeepCGSR/chkpt'):
+
+def fine_tune_bert(texts, labels, num_labels, epochs=10, batch_size=8, max_len=512, learning_rate=2e-5, save_dir='./model/DeepCGSR/chkpt'):
+    # Kiểm tra nếu GPU có sẵn và thiết lập thiết bị
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
     # Khởi tạo tokenizer và dataset
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     dataset = CustomDataset(texts, labels, tokenizer, max_len)
@@ -78,8 +83,10 @@ def fine_tune_bert(texts, labels, num_labels, epochs=3, batch_size=8, max_len=51
     # DataLoader với collate_fn
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn(tokenizer))
 
-    # Load pre-trained BERT và optimizer
+    # Load pre-trained BERT và optimizer, chuyển mô hình sang GPU (nếu có)
     model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=num_labels)
+    model = model.to(device)  # Chuyển mô hình sang GPU
+
     optimizer = AdamW(model.parameters(), lr=learning_rate)
 
     start_epoch = 0
@@ -88,7 +95,7 @@ def fine_tune_bert(texts, labels, num_labels, epochs=3, batch_size=8, max_len=51
     # Kiểm tra xem checkpoint có tồn tại không
     if os.path.exists(checkpoint_path):
         print(f"Checkpoint found at {checkpoint_path}. Loading checkpoint.")
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, map_location=device)  # Load checkpoint vào GPU (nếu có)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch']
@@ -103,9 +110,11 @@ def fine_tune_bert(texts, labels, num_labels, epochs=3, batch_size=8, max_len=51
         
         for batch in progress_bar:
             optimizer.zero_grad()
-            input_ids = batch['input_ids']
-            attention_mask = batch['attention_mask']
-            labels = batch['labels']
+            
+            # Chuyển các tensor của batch sang GPU
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
 
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             loss = outputs.loss
@@ -129,58 +138,61 @@ def fine_tune_bert(texts, labels, num_labels, epochs=3, batch_size=8, max_len=51
 
     return model, tokenizer
 
+def get_bert_embeddings(texts, tokenizer, model, device):
+    # Tokenize văn bản và chuyển các tensor sang GPU (nếu có)
+    inputs = tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=512).to(device)
+    
+    with torch.no_grad():
+        outputs = model.bert(**inputs)
+    
+    # Lấy embedding cuối cùng và trung bình trên chiều thứ 1
+    return outputs.last_hidden_state.mean(dim=1)
 
 # Load pre-trained BERT model and tokenizer
 def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='Kmeans'):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     cleaned_data = data_df.dropna(subset=['filteredReviewText', 'overall_new'])
-    # cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
-    # cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
-    cleaned_data.loc[:, 'overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
-    
-    
-    # Lấy danh sách reviews và labels từ dữ liệu đã làm sạch và chuyển đổi
+    cleaned_data['overall_new'] = cleaned_data['overall_new'].apply(lambda x: 1 if x > 3 else 0)
+
     texts = cleaned_data['filteredReviewText'].tolist()
     labels = cleaned_data['overall_new'].tolist()
 
+    # Fine-tune BERT và chuyển mô hình sang GPU
     model, tokenizer = fine_tune_bert(texts, labels, num_labels=5, epochs=2)
+    model = model.to(device)
     
-    # Tokenize and get BERT embeddings for each document
-    def get_bert_embeddings(texts):
-        inputs = tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=512)
-        with torch.no_grad():
-            outputs = model.bert(**inputs)
-        return outputs.last_hidden_state.mean(dim=1)
-    
-    # Generate embeddings for all documents
+    # Lấy embeddings từ mô hình BERT
     embeddings = []
     for text in split_data:
-        embedding = get_bert_embeddings([' '.join(text)])
+        embedding = get_bert_embeddings([' '.join(text)], tokenizer, model, device)
         embeddings.append(embedding)
-    embeddings = torch.vstack(embeddings)
 
-    # Clustering to find topics
+    embeddings = torch.vstack(embeddings).to(device)
+
+    # Clustering để tìm chủ đề
     if cluster_method == 'Kmeans':
         print("Kmeans")
-        clustering = KMeans(n_clusters=num_topics, random_state=42).fit(embeddings.numpy())
-        labels = clustering.labels_
+        clustering = KMeans(n_clusters=num_topics, random_state=42).fit(embeddings.cpu().numpy())
     elif cluster_method == 'Birch':
         print("Birch")
-        clustering = Birch(n_clusters=num_topics).fit(embeddings.numpy())
-        labels = clustering.labels_
+        clustering = Birch(n_clusters=num_topics).fit(embeddings.cpu().numpy())
     elif cluster_method == 'DBSCAN':
         print("DBSCAN")
-        clustering = DBSCAN(eps=3, min_samples=num_topics).fit(embeddings.numpy())
-        labels = clustering.labels_
+        clustering = DBSCAN(eps=3, min_samples=num_topics).fit(embeddings.cpu().numpy())
     elif cluster_method == 'MeanShift':
         print("MeanShift")
-        clustering = MeanShift(bandwidth=num_topics).fit(embeddings.numpy())
-        labels = clustering.labels_
+        clustering = MeanShift(bandwidth=num_topics).fit(embeddings.cpu().numpy())
     elif cluster_method == 'BisectingKMeans':
         print("BisectingKMeans")
-        clustering = BisectingKMeans(n_clusters=num_topics, random_state=0).fit(embeddings.numpy())
-        labels = clustering.labels_
-    silhouette_score_val = silhouette_score(embeddings.numpy(), labels)
+        clustering = BisectingKMeans(n_clusters=num_topics, random_state=0).fit(embeddings.cpu().numpy())
+
+    labels = clustering.labels_
+    
+    # Tính silhouette score
+    silhouette_score_val = silhouette_score(embeddings.cpu().numpy(), labels)
+    
     evaluation_df = pd.DataFrame({
         'num_topics': [num_topics],
         'silhouette_score_val': [silhouette_score_val]
@@ -189,52 +201,20 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='
     # Lưu vào file CSV
     file_path = 'model/DeepCGSR/evaluation_clustering/silhouette_score.csv'
     evaluation_df.to_csv(file_path, index=False)
-    # Extract top words for each topic
+
+    # Tiếp tục xử lý văn bản và trích xuất từ top của mỗi chủ đề...
     topic_to_words = []
     for i in range(num_topics):
         cluster_indices = [j for j, label in enumerate(labels) if label == i]
         cluster_texts = [' '.join(split_data[j]) for j in cluster_indices]
-
-        # Remove empty or stop-word-only documents
         cluster_texts = [text for text in cluster_texts if text.strip()]
 
-        # Skip if no valid documents remain for the cluster
+        # Tránh lỗi nếu không có tài liệu hợp lệ
         if not cluster_texts:
             topic_to_words.append([])
             continue
-        
-        # Further filter documents that are empty after stop-word removal
-        valid_cluster_texts = []
-        vectorizer_temp = CountVectorizer(stop_words='english')
-        for text in cluster_texts:
-            try:
-                if vectorizer_temp.fit_transform([text]).shape[1] > 0:  # Ensure some valid tokens exist
-                    valid_cluster_texts.append(text)
-            except ValueError:
-                print("Error processing text:", text)
-                continue
-            
-        # Skip if no valid documents after filtering
-        if not valid_cluster_texts:
-            topic_to_words.append([])
-            continue
-        
-        # Further filter documents that are empty after stop-word removal
-        valid_cluster_texts = []
-        vectorizer_temp = CountVectorizer(stop_words='english')
-        for text in cluster_texts:
-            try:
-                if vectorizer_temp.fit_transform([text]).shape[1] > 0:  # Ensure some valid tokens exist
-                    valid_cluster_texts.append(text)
-            except ValueError:
-                print("Error processing text:", text)
-                continue
-            
-        # Skip if no valid documents after filtering
-        if not valid_cluster_texts:
-            topic_to_words.append([])
-            continue
-        # Proceed with vectorization
+
+        # Vector hóa văn bản
         vectorizer = TfidfVectorizer(max_features=num_words, stop_words='english')
         tfidf_matrix = vectorizer.fit_transform(cluster_texts)
 
@@ -243,10 +223,11 @@ def get_tbert_model(data_df, split_data, num_topics, num_words, cluster_method='
         top_words = [feature_names[ind] for ind in indices[:num_words]]
         topic_to_words.append(top_words)
     
-    # Create a dummy dictionary for compatibility
+    # Tạo dictionary cho tài liệu
     dictionary = corpora.Dictionary(split_data)
-    # corpus = [dictionary.doc2bow(text) for text in split_data]
+    
     return embeddings, model, clustering, dictionary, tokenizer, topic_to_words
+
 
 def get_lda_model(split_data, num_topics, num_words):
     dictionary = corpora.Dictionary(split_data)
@@ -335,29 +316,30 @@ def get_topic_sentiment_metrix_lda(text, dictionary, lda_model, topic_word_metri
         topci_sentiment_m[topic_id] = cur_topic_sentiment
     return topci_sentiment_m
 #=================================================
-
+import torch
+import numpy as np
 from nltk.corpus import wordnet as wn
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 analyzer = SentimentIntensityAnalyzer()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Sử dụng GPU nếu có
 
 def get_word_sentiment_score_by_vader(word):
     sentiment_dict = analyzer.polarity_scores(word)
     return sentiment_dict['compound']
 
 def get_top_synonyms(word, top_n=4):
-    # Tìm các synset liên quan đến từ cho danh từ, động từ, và tính từ
     noun_synsets = wn.synsets(word, pos=wn.NOUN)
-    # verb_synsets = wn.synsets(word, pos=wn.VERB)
     adj_synsets = wn.synsets(word, pos=wn.ADJ)
-
-    all_synsets = noun_synsets  + adj_synsets
+    
+    all_synsets = noun_synsets + adj_synsets
     synonym_scores = []
     for synset in all_synsets:
         for lemma in synset.lemma_names():
             if lemma.lower() != word.lower() and lemma not in [syn[0] for syn in synonym_scores]:
                 synonym_scores.append((lemma))
-
+    
     return synonym_scores[:top_n]
 
 def get_word_sentiment_score_addition(word):
@@ -366,7 +348,7 @@ def get_word_sentiment_score_addition(word):
     if not m:
         return s  # Trả về 0 nếu không tìm thấy synset nào cho từ này
     for synset in m:
-        if(synset.pos_score() == 0 and synset.neg_score() == 0):
+        if synset.pos_score() == 0 and synset.neg_score() == 0:
             s += get_word_sentiment_score_by_vader(synset.synset.name().split('.')[0])
         else:
             s += (synset.pos_score() - synset.neg_score())
@@ -383,9 +365,9 @@ def get_synonyms_sentiment_scores(word, top_n=4):
     scores = scores / top_n
     return scores
 
-
 def get_topic_sentiment_matrix_tbert(text, topic_word_matrix, dependency_parser, topic_nums=50):
-    topic_sentiment_m = np.zeros(topic_nums)
+    topic_sentiment_m = torch.zeros(topic_nums, device=device)  # Đảm bảo ma trận sentiment ở trên GPU
+
     try:
         sentences = preprocessed(text)
         dep_parser_result_p = []
@@ -408,9 +390,9 @@ def get_topic_sentiment_matrix_tbert(text, topic_word_matrix, dependency_parser,
 
             if cur_topic_senti_word:  # Kiểm tra nếu danh sách không rỗng
                 cur_topic_sentiment = sum(get_synonyms_sentiment_scores(senti_word) for senti_word in cur_topic_senti_word)
-                topic_sentiment_m[topic_id] = np.clip(cur_topic_sentiment, -5, 5)
+                topic_sentiment_m[topic_id] = torch.tensor(np.clip(cur_topic_sentiment, -5, 5), device=device)  # Chuyển sang GPU
             else:
-                topic_sentiment_m[topic_id] = 0  # Hoặc một giá trị mặc định khác nếu danh sách rỗng
+                topic_sentiment_m[topic_id] = torch.tensor(0, device=device)  # Chuyển giá trị mặc định sang GPU
                 
         return topic_sentiment_m
     except Exception as e:
